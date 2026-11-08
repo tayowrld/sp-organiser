@@ -1,69 +1,51 @@
-import Image from "next/image";
+import { formatDeadline } from './dates'
+import Link from 'next/link'
+import { ArrowUpRight, ArrowRight, Plus, Check, ClipboardList, Radio } from 'lucide-react'
+import { getUser } from './auth/actions'
+import db from './db'
+import { displayStatus } from './operations'
 
-export default function Home() {
+export const dynamic = 'force-dynamic'
+
+type Task = { id: number; title: string; deadline: number | string; status: string; priority: string; assigned_to: number; name: string }
+type Notice = { id: number; title: string; category: string }
+
+export default async function HomePage() {
+  const user = await getUser()
+  const manager = Boolean(user && (user.is_superadmin || db.prepare('SELECT id FROM users WHERE manager_id = ? AND is_active = 1 LIMIT 1').get(user.id)))
+  const tasks = user ? db.prepare(`SELECT t.*, u.name FROM tasks t JOIN users u ON u.id = t.assigned_to WHERE ${user?.is_superadmin ? 't.assigned_to != ?' : manager ? '(u.manager_id = ? OR t.assigned_to = ?)' : 't.assigned_to = ?'} ORDER BY CASE t.status WHEN 'просрочена' THEN 0 WHEN 'в работе' THEN 1 WHEN 'новая' THEN 2 ELSE 3 END, t.id DESC`).all(...(manager && !user.is_superadmin ? [user.id, user.id] : [user.id])) as Task[] : []
+  tasks.forEach((task, index) => { tasks[index] = displayStatus(task) })
+  const notices = user ? db.prepare('SELECT id, title, category FROM updates ORDER BY id DESC LIMIT 3').all() as Notice[] : []
+  const done = tasks.filter(task => task.status === 'выполнена').length
+  const overdue = tasks.filter(task => task.status === 'просрочена').length
+  const active = tasks.filter(task => task.status !== 'выполнена')
+  const progress = tasks.length ? Math.round(done / tasks.length * 100) : 0
+  const destination = '/work'
+  const date = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long', timeZone: 'Europe/Moscow' }).format(new Date())
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className='dashboard'>
+      <div className='page-eyebrow'><span><i /> СП ОРГАНИЗАТОР</span><span>{date}</span></div>
+      <section className='overview-heading'>
+        <div><p className='greeting'>{user ? `Здравствуйте, ${user.name.split(' ')[0]}` : 'Добро пожаловать'}</p><h1>Обзор <span>задач</span></h1></div>
+        <Link href={user ? manager ? '/management/new' : '/calendar' : '/login'} className='primary-action'>{manager ? <Plus size={18} /> : <ArrowRight size={18} />}{user ? manager ? 'Назначить задачу' : 'К моим задачам' : 'Войти в команду'}</Link>
+      </section>
+      <section className='overview-grid' aria-label='Сводка задач'>
+        <Link href={destination} className='metric-card'><div className='card-kicker'>В РАБОТЕ<ClipboardList size={18} /></div><strong>{String(active.length).padStart(2, '0')}<span>задач</span></strong><p>Открыть список задач <ArrowUpRight size={17} /></p></Link>
+        <Link href={destination} className='metric-card attention'><div className='card-kicker'>ТРЕБУЮТ ВНИМАНИЯ<Radio size={18} /></div><strong>{String(overdue).padStart(2, '0')}<span>просрочено</span></strong><p>{overdue ? 'Проверьте сроки выполнения' : 'Просроченных задач нет'}<ArrowUpRight size={17} /></p></Link>
+      </section>
+      <div className='work-grid'>
+        <section className='task-panel'>
+          <div className='section-heading'><h2>Текущие задачи <span>{active.length}</span></h2><Link href={destination}>Все задачи <ArrowRight size={16} /></Link></div>
+          <div className='task-list'>
+            {active.slice(0, 4).map((task, index) => <Link className='focus-task' key={task.id} href='/work'><span className='task-index'>{String(index + 1).padStart(2, '0')}</span><div className='task-content'><div className='task-meta'><span className={task.status === 'просрочена' ? 'status-dot urgent' : 'status-dot'}>{task.status}</span><span>{formatDeadline(task.deadline)}</span></div><h3>{task.title}</h3><p><span className='mini-avatar'>{task.name.charAt(0)}</span>{task.name}{task.priority === 'высокий' && <span className='priority-label'>Высокий приоритет</span>}</p></div><ArrowUpRight className='task-arrow' size={20} /></Link>)}
+            {active.length === 0 && <div className='empty-focus'><Check size={32} /><h3>{user ? 'Открытых задач нет' : 'Добро пожаловать в организатор'}</h3><p>{user ? 'Все назначенные задачи выполнены.' : 'Войдите, чтобы увидеть задачи, сроки и важные сообщения команды.'}</p><Link href={user ? destination : '/login'}>{user ? 'Открыть задачи' : 'Войти в организатор'} <ArrowRight size={16} /></Link></div>}
+          </div>
+          <div className='completion'><span><Check size={16} /> Выполнено {done} из {tasks.length}</span><div role='progressbar' aria-label='Выполненные задачи' aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progress}%` }} /></div><b>{progress}%</b></div>
+        </section>
+        <aside className='notice-panel'><div className='section-heading'><h2>Объявления</h2><Radio size={19} /></div><p className='panel-description'>Важное для всей команды</p>{notices.map(notice => <Link className='notice-item' key={notice.id} href='/important'><span className={notice.category === 'срочное' ? 'notice-category urgent' : 'notice-category'}>{notice.category}</span><h3>{notice.title}</h3><ArrowUpRight size={17} /></Link>)}{notices.length === 0 && <p className='notice-empty'>{user ? 'Новых сообщений пока нет.' : 'Объявления и инструкции будут здесь после входа.'}</p>}<Link className='notice-link' href='/important'>Все объявления <ArrowRight size={17} /></Link></aside>
+      </div>
+      <footer className='dashboard-footer'><span>СП / ОРГАНИЗАТОР</span><span>Планирование работы ресторана</span></footer>
     </div>
-  );
+  )
 }

@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# СП Организатор
 
-## Getting Started
+Планирование работы ресторана: Next.js, TypeScript, SQLite и мобильный PWA-интерфейс на русском языке.
 
-First, run the development server:
+## Локальный запуск
 
 ```bash
+npm ci
+npm run admin:create
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте [localhost:6553](http://localhost:6553). Команда создания администратора выводит данные первого входа; `ADMIN_EMAIL` и `ADMIN_PASSWORD` можно задать в окружении. Локальная база располагается в [`data/app.sqlite`](data/app.sqlite), каталог можно изменить через `DATA_DIR`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Рабочие сценарии
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Раздел «Работа» (`/work`) позволяет принять задачу, завершить её с комментарием или фотографией, сообщить о проблеме, проверить результат и передать ответственность следующему сотруднику. Руководитель назначает задачи сотрудникам и отделам, планирует смены, включает ежедневные чек-листы и публикует объявления. Сотрудники подтверждают ознакомление. Просрочка вычисляется по сроку, действия записываются в историю.
 
-## Learn More
+После первого онлайн-открытия рабочий экран доступен без сети. Действия и новые фотографии сохраняются на устройстве до синхронизации; конфликты не перезаписывают чужие изменения. Вход, новые данные и просмотр ранее загруженных на сервер фотографий требуют сети. Отправка очереди возобновляется при открытом приложении. Подробности: [рабочий экран](app/work/readme.md), [серверная логика](app/operations/readme.md).
 
-To learn more about Next.js, take a look at the following resources:
+## Проверки
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm test
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Интеграционные тесты используют отдельную временную базу и проверяют права, подтверждения, конфликты, передачи, повторения и резервное копирование.
 
-## Deploy on Vercel
+## Сервер
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Основной вариант запуска — Docker Compose: `docker compose build`, `docker compose up -d --wait`. Затем создайте администратора: `docker compose exec -e ADMIN_EMAIL=you@company.ru app node scripts/create-admin.mjs`. До запуска настройте `.env`, домен и HTTPS по [инструкции развёртывания](deploy/readme.md). Демонстрационные данные не создаются; SQLite хранится в постоянном томе `/data`, секреты в образ не включаются.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Готовы конфигурации PM2 и nginx для порта 6553. Рабочие данные хранятся в `/data`. Фоновый процесс создаёт ежедневные задачи, определяет просрочки, доставляет push и делает резервные копии. Требуются HTTPS, секреты сессии и обслуживания, VAPID-ключи.
+
+Порядок установки, настройки уведомлений и восстановления описан в [инструкции развёртывания](deploy/readme.md). Пример окружения: [`.env.example`](.env.example).
+
+## Документация
+
+- [app/admin](app/admin/readme.md)
+- [app/api/health](app/api/health/readme.md)
+- [app/api/maintenance](app/api/maintenance/readme.md)
+- [app/api/photos/[id]](app/api/photos/%5Bid%5D/readme.md)
+- [app/api/photos](app/api/photos/readme.md)
+- [app/api](app/api/readme.md)
+- [app/api/work](app/api/work/readme.md)
+- [app/auth](app/auth/readme.md)
+- [app/components/IkonsIcon](app/components/IkonsIcon/readme.md)
+- [app/components/NavigationBar](app/components/NavigationBar/readme.md)
+- [app/components](app/components/readme.md)
+- [app/dates](app/dates/readme.md)
+- [app/db](app/db/readme.md)
+- [app/operations](app/operations/readme.md)
+- [app/people](app/people/readme.md)
+- [app](app/readme.md)
+- [app/work](app/work/readme.md)
+- [deploy](deploy/readme.md)
+- [public](public/readme.md)
+- [scripts](scripts/readme.md)
+- [tests](tests/readme.md)

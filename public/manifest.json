@@ -1,0 +1,25 @@
+{
+  "name": "СП Организатор",
+  "short_name": "СП Организатор",
+  "description": "Система планирования для ресторана",
+  "start_url": "/work",
+  "display": "standalone",
+  "background_color": "#101215",
+  "theme_color": "#101215",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

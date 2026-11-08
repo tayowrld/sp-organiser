@@ -1,0 +1,50 @@
+name: sp-planner
+
+x-runtime: &runtime
+  image: sp-planner:local
+  env_file: .env
+  environment:
+    NODE_ENV: production
+    DATA_DIR: /data
+    BACKUP_DIR: /data/backups
+  volumes:
+    - planner-data:/data
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+services:
+  app:
+    <<: *runtime
+    build: .
+    ports:
+      - '127.0.0.1:6553:6553'
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:6553/api/health', { signal: AbortSignal.timeout(4000) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    <<: *runtime
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      BACKUP_DIR: /data/backups
+      INTERNAL_APP_URL: http://app:6553
+    command: ['node', 'scripts/worker.mjs']
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  planner-data:
