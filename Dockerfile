@@ -10,14 +10,17 @@ COPY . .
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runner
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupmod --gid "$APP_GID" node && usermod --uid "$APP_UID" --gid "$APP_GID" node
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=6553 DATA_DIR=/data BACKUP_DIR=/data/backups
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=6553 DATA_DIR=./data BACKUP_DIR=./data/backups
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/scripts ./scripts
 COPY --from=builder --chown=node:node /app/node_modules/bcryptjs ./node_modules/bcryptjs
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 6553
 CMD ["node", "server.js"]
