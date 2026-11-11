@@ -13,7 +13,7 @@ type Notice = { id: number; title: string; category: string }
 export default async function HomePage() {
   const user = await getUser()
   const manager = Boolean(user && (user.is_superadmin || db.prepare('SELECT id FROM users WHERE manager_id = ? AND is_active = 1 LIMIT 1').get(user.id)))
-  const tasks = user ? db.prepare(`SELECT t.*, u.name FROM tasks t JOIN users u ON u.id = t.assigned_to WHERE ${user?.is_superadmin ? 't.assigned_to != ?' : manager ? '(u.manager_id = ? OR t.assigned_to = ?)' : 't.assigned_to = ?'} ORDER BY CASE t.status WHEN 'просрочена' THEN 0 WHEN 'в работе' THEN 1 WHEN 'новая' THEN 2 ELSE 3 END, t.id DESC`).all(...(manager && !user.is_superadmin ? [user.id, user.id] : [user.id])) as Task[] : []
+  const tasks = user ? db.prepare(`SELECT t.*, u.name FROM tasks t JOIN users u ON u.id = t.assigned_to WHERE t.deleted = 0 AND (t.initiative = 0 OR t.created_by = ${user.id}) AND ${user?.is_superadmin ? 't.assigned_to != ?' : manager ? '(u.manager_id = ? OR t.assigned_to = ?)' : 't.assigned_to = ?'} ORDER BY CASE t.status WHEN 'просрочена' THEN 0 WHEN 'в работе' THEN 1 WHEN 'новая' THEN 2 ELSE 3 END, t.id DESC`).all(...(manager && !user.is_superadmin ? [user.id, user.id] : [user.id])) as Task[] : []
   tasks.forEach((task, index) => { tasks[index] = displayStatus(task) })
   const notices = user ? db.prepare('SELECT id, title, category FROM updates ORDER BY id DESC LIMIT 3').all() as Notice[] : []
   const done = tasks.filter(task => task.status === 'выполнена').length

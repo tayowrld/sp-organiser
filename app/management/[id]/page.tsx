@@ -39,7 +39,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
   const employee = db.prepare(`SELECT id, name, role FROM users WHERE id = ? AND ${user.is_superadmin ? '1 = 1' : 'manager_id = ?'}`).get(...(user.is_superadmin ? [employeeId] : [employeeId, user.id])) as Employee | undefined
   if (!employee) redirect('/management')
 
-  const tasks = db.prepare('SELECT id, title, description, deadline, status, priority FROM tasks WHERE assigned_to = ? ORDER BY id DESC').all(employeeId) as Task[]
+  const tasks = db.prepare('SELECT id, title, description, deadline, status, priority FROM tasks WHERE deleted = 0 AND initiative = 0 AND assigned_to = ? ORDER BY id DESC').all(employeeId) as Task[]
   tasks.forEach((task, index) => { tasks[index] = displayStatus(task) })
 
   function StatusBadge({ status }: { status: Task['status'] }) {

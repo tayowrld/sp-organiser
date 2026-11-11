@@ -1,4 +1,4 @@
-const CACHE = 'sp-shell-v2'
+const CACHE = 'sp-shell-v3'
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/offline.html', '/icon-192.png', '/icon-512.png'])))
   self.skipWaiting()

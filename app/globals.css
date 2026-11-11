@@ -495,3 +495,17 @@ input[type=checkbox] { accent-color: var(--accent); }
 .work-page > details.content-card { background: var(--card-tint); }
 .work-page .work-result { background: var(--muted); }
 .work-page .work-handover { background: var(--muted); }
+
+.task-calendar { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--card); }
+.task-calendar header { padding: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.task-calendar h2 { text-transform: capitalize; }
+.calendar-scroll { overflow-x: auto; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(100px, 1fr)); min-width: 700px; }
+.calendar-weekday { padding: 10px; color: var(--muted-foreground); font-size: 12px; border-top: 1px solid var(--border); }
+.calendar-day { min-height: 140px; padding: 8px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); }
+.calendar-day.outside { background: var(--background); }
+.calendar-day time { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 12px; margin-bottom: 8px; }
+.calendar-day time[aria-current=date] { border-radius: 50%; background: var(--accent); color: var(--background); }
+.work-page .calendar-task { display: flex; flex-direction: column; text-align: left; width: 100%; min-height: 44px; padding: 8px; margin-bottom: 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--muted); color: var(--foreground); font-size: 12px; overflow-wrap: anywhere; }
+.calendar-task small { color: var(--muted-foreground); }
+.calendar-task.done span { text-decoration: line-through; opacity: .6; }

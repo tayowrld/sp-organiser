@@ -79,6 +79,10 @@ db.transaction(() => {
     shift_id: 'INTEGER',
     template_id: 'INTEGER',
     occurrence: 'TEXT',
+    initiative: 'INTEGER NOT NULL DEFAULT 0',
+    client_id: 'TEXT',
+    deleted: 'INTEGER NOT NULL DEFAULT 0',
+    deletion_requested: 'INTEGER NOT NULL DEFAULT 0',
   })) {
     if (!taskColumns.has(name)) db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${definition}`)
   }
@@ -120,6 +124,15 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS subscriptions (
     endpoint TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), subscription TEXT NOT NULL
+  );
+`)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notification_settings (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    advance_days INTEGER NOT NULL DEFAULT 3,
+    repeat_hours INTEGER NOT NULL DEFAULT 24,
+    enabled INTEGER NOT NULL DEFAULT 1
   );
 `)
 

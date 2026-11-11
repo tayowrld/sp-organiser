@@ -3,6 +3,8 @@
 import { ArrowRight, CheckCircle2, Clock3, CloudOff, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { clearLocal, readLocal, writeLocal, changeQueue, type Pending } from './storage'
+import TaskCalendar from './TaskCalendar'
+import { projectTasks } from './projection'
 import type { snapshot, Task } from '../operations'
 
 type Data = Omit<ReturnType<typeof snapshot>, 'events' | 'notices' | 'acknowledgements' | 'shifts' | 'templates' | 'handovers' | 'notifications'> & {
@@ -20,6 +22,9 @@ const tabs = ['Задачи', 'Смены', 'Передача', 'Объявле�
 export default function Workspace() {
   const [serverData, setData] = useState<Data | null>(null)
   const [tab, setTab] = useState('Задачи')
+  const [view, setView] = useState('Список')
+  const [selectedTask, setSelectedTask] = useState<number | null>(null)
+  const [grouped, setGrouped] = useState(true)
   const [message, setMessage] = useState('Загрузка…')
   const [pending, setPending] = useState<Pending[]>([])
   const [busy, setBusy] = useState(false)
@@ -86,6 +91,8 @@ export default function Workspace() {
       try {
         const cached = await readLocal<Data>('snapshot')
         if (new URLSearchParams(window.location.search).get('tab') === 'announcements') setTab('Объявления')
+        if (new URLSearchParams(window.location.search).get('tab') === 'departments') setTab('Отделы')
+        if (new URLSearchParams(window.location.search).get('view') === 'calendar') setView('Календарь')
         if (new URLSearchParams(window.location.search).has('create')) setCreateOpen(true)
         if (!mounted) return
         if (cached) { state.current = cached; setData(cached) }
@@ -116,7 +123,8 @@ export default function Workspace() {
           reader.readAsDataURL(file)
         })
       }
-      const operation = { ...fields, ...extra, id: crypto.randomUUID(), kind, userId: state.current.user.id } as Pending
+      const localTask = data?.tasks.find(task => task.id === extra.task && task.id < 0)
+      const operation = { ...fields, ...extra, ...(localTask ? { taskOperation: localTask.client_id } : {}), id: crypto.randomUUID(), kind, userId: state.current.user.id } as Pending
       setPending(await changeQueue(queue => [...queue, operation]))
       setMessage('Действие сохранено на устройстве и ожидает отправки')
     } catch (error) {
@@ -131,19 +139,8 @@ export default function Workspace() {
     setMessage('Действие удалено из очереди. Можно повторить его с актуальными данными.')
   }
 
-  const data = serverData ? { ...serverData, tasks: serverData.tasks.map(task => {
-    const projected = { ...task }
-    for (const operation of pending.filter(item => item.task === task.id)) {
-      if (Number(operation.version) !== projected.version) continue
-      if (operation.kind === 'accept') { projected.workflow = 'в работе'; projected.claimed = 1; projected.assigned_to = serverData.user.id }
-      if (operation.kind === 'complete') projected.workflow = projected.require_review ? 'на проверке' : 'выполнена'
-      if (operation.kind === 'problem') projected.workflow = 'проблема'
-      if (operation.kind === 'approve') projected.workflow = 'выполнена'
-      if (operation.kind === 'reject') projected.workflow = 'в работе'
-      projected.version++
-    }
-    return projected
-  }) } : null
+  const settingsOperation = pending.filter(item => item.kind === 'settings' && item.userId === serverData?.user.id).at(-1)
+  const data = serverData ? { ...serverData, tasks: projectTasks(serverData.tasks, pending, serverData.user.id), notificationSettings: settingsOperation ? { advance_days: Number(settingsOperation.advance_days), repeat_hours: Number(settingsOperation.repeat_hours), enabled: Number(Boolean(settingsOperation.enabled)) } : serverData.notificationSettings } : null
 
   async function enablePush() {
     try {
@@ -164,7 +161,7 @@ export default function Workspace() {
   const manager = data.user.manager
   const names = (id: number) => data.people.find(person => person.id === id)?.name || `Сотрудник №${id}`
   const overdue = (task: Task) => task.workflow !== 'выполнена' && typeof task.deadline === 'number' && task.deadline < (now || data.generatedAt)
-  const actionLabels: Record<string, string> = { accept: 'Принять', complete: 'Завершить', problem: 'Проблема', approve: 'Подтвердить', reject: 'Вернуть', takeover: 'Принять передачу', handover: 'Передать', create: 'Создать задачу', ack: 'Ознакомлен', publish: 'Опубликовать', template: 'Создать чек-лист', shift: 'Создать смену', closeShift: 'Закрыть смену', cancelHandover: 'Отменить передачу', toggleTemplate: 'Изменить расписание', read: 'Прочитать' }
+  const actionLabels: Record<string, string> = { superadmin: 'Изменить права главного администратора', settings: 'Настроить напоминания', initiative: 'Создать инициативу', edit: 'Изменить задачу', delete: 'Удалить задачу', requestDelete: 'Попросить удалить', denyDelete: 'Отклонить удаление', reschedule: 'Изменить срок', accept: 'Принять', complete: 'Завершить', problem: 'Проблема', approve: 'Подтвердить', reject: 'Вернуть', takeover: 'Принять передачу', handover: 'Передать', create: 'Создать задачу', ack: 'Ознакомлен', publish: 'Опубликовать', template: 'Создать чек-лист', shift: 'Создать смену', closeShift: 'Закрыть смену', cancelHandover: 'Отменить передачу', toggleTemplate: 'Изменить расписание', read: 'Прочитать' }
   const recipients = <><label>Сотрудник<select name='employee' defaultValue=''><option value=''>Выберите сотрудника</option>{data.people.filter(person => person.assignable).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Или весь отдел<select name='department' defaultValue=''><option value=''>Личная задача</option>{data.departments.filter(item => item.assignable).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></>
   const requirements = <div className='work-checks'><label><input type='checkbox' name='require_comment' /> Нужен комментарий</label><label><input type='checkbox' name='require_photo' /> Нужна фотография</label><label><input type='checkbox' name='require_review' /> Проверка руководителем</label></div>
   const shownTasks = data.tasks.filter(task => (!department || task.department_id === Number(department) || data.people.find(person => person.id === task.assigned_to)?.department === Number(department)) && (filter === 'all' || filter === 'mine' && task.claimed && task.assigned_to === data.user.id || filter === 'overdue' && overdue(task) || filter === 'review' && task.workflow === 'на проверке' || filter === 'active' && (task.workflow !== 'выполнена' || pending.some(item => item.task === task.id))))
@@ -173,16 +170,22 @@ export default function Workspace() {
     const owner = task.claimed && task.assigned_to === data!.user.id
     const reviewer = task.assigned_to !== data!.user.id && (data!.user.is_superadmin || task.created_by === data!.user.id || data!.people.find(person => person.id === task.assigned_to)?.assignable)
     const waiting = data!.handovers.find(item => item.task_id === task.id && !item.accepted_at)
-    const queued = pending.some(item => item.task === task.id)
-    return <article className='content-card work-task' key={task.id}>
+    const queued = task.id < 0 || pending.some(item => item.task === task.id || item.taskOperation && item.taskOperation === task.client_id)
+    const editable = task.created_by === data!.user.id
+    return <article className='content-card work-task' id={`task-${task.id}`} key={task.id}>
       <div className='work-heading'><div className='work-task-title'><span className='work-task-mark'><CheckCircle2 size={19} /></span><h2>{task.title}</h2></div><span className={overdue(task) ? 'work-status urgent' : 'work-status'}>{task.workflow}{overdue(task) ? ' · Просрочена' : ''}</span></div>
+      <p className='work-meta'>{task.initiative ? 'Личная инициатива' : `Поручение · ${names(task.created_by)}`}</p>
       <p className='work-description'>{task.description}</p><p className='work-meta'>Срок: {date(task.deadline)} · {task.priority} приоритет</p>
       <p className='work-meta'>{task.department_id ? data!.departments.find(item => item.id === task.department_id)?.name + ' · ' : ''}{task.claimed ? names(task.assigned_to) : 'Ожидает ответственного из отдела'}</p>
       {task.require_comment || task.require_photo || task.require_review ? <p className='work-meta'>Подтверждение: {[task.require_comment && 'комментарий', task.require_photo && 'фото', task.require_review && 'проверка руководителем'].filter(Boolean).join(', ')}</p> : null}
       {queued && <p role='status'>Показан ожидаемый результат. Действия ещё не подтверждены сервером.</p>}
       {typeof task.deadline === 'string' && <p role='alert'>Срок задан текстом. Руководителю нужно указать точную дату для расчёта просрочки.</p>}
       <fieldset disabled={busy}>
-        {(data!.user.is_superadmin || task.created_by === data!.user.id || data!.people.find(person => person.id === task.assigned_to)?.assignable) && <details><summary>Изменить срок</summary><form className='work-form' action={form => submit('reschedule', form, { task: task.id, version: task.version })}><label>Новый срок (Москва)<input type='datetime-local' name='deadline' required /></label><label>Причина<textarea name='comment' required /></label><button>Сохранить срок</button></form></details>}
+        {editable && <details><summary>Изменить задачу</summary><form className='work-form' action={form => submit('edit', form, { task: task.id, version: task.version })}><label>Название<input name='title' required maxLength={200} defaultValue={task.title} /></label><label>Описание<textarea name='description' required maxLength={4000} defaultValue={task.description} /></label><label>Срок (Москва)<input type='datetime-local' name='deadline' required defaultValue={typeof task.deadline === 'number' ? new Date(task.deadline + 10800000).toISOString().slice(0, 16) : ''} /></label><label>Приоритет<select name='priority' defaultValue={task.priority}><option>низкий</option><option>средний</option><option>высокий</option></select></label><button>Сохранить задачу</button></form></details>}
+        {editable && <details><summary>Удалить задачу</summary><p>Задача исчезнет из рабочих списков.</p><button className='secondary' onClick={() => send('delete', { task: task.id, version: task.version })}>Подтвердить удаление</button></details>}
+        {Boolean(task.deletion_requested) && <div className='work-handover'><p>Запрошено удаление. Причина указана в истории.</p>{editable && <form className='work-form' action={form => submit('denyDelete', form, { task: task.id, version: task.version })}><label>Причина отказа<textarea name='comment' required /></label><button>Отклонить запрос</button></form>}</div>}
+        {owner && !editable && !task.deletion_requested && <details><summary>Попросить автора удалить</summary><form className='work-form' action={form => submit('requestDelete', form, { task: task.id, version: task.version })}><label>Причина<textarea name='comment' required maxLength={4000} /></label><button>Отправить запрос</button></form></details>}
+        {editable && <details><summary>Изменить срок</summary><form className='work-form' action={form => submit('reschedule', form, { task: task.id, version: task.version })}><label>Новый срок (Москва)<input type='datetime-local' name='deadline' required /></label><label>Причина<textarea name='comment' required /></label><button>Сохранить срок</button></form></details>}
         {task.workflow === 'новая' && (owner || !task.claimed && data!.departments.some(item => item.id === task.department_id)) ? <button onClick={() => send('accept', { task: task.id, version: task.version })}>Принять в работу</button> : null}
         {(owner && task.workflow !== 'выполнена' || reviewer && task.workflow === 'на проверке') && <details className='work-result'><summary>Отметить результат или проблему</summary><form className='work-form' action={async form => {
           const kind = String(form.get('action'))
@@ -192,7 +195,7 @@ export default function Workspace() {
           {owner && ['новая', 'в работе', 'проблема'].includes(task.workflow) ? <button name='action' value='problem' className='secondary'>Сообщить о проблеме</button> : null}
           {reviewer && task.workflow === 'на проверке' ? <><button name='action' value='approve'>Подтвердить результат</button><button name='action' value='reject' className='secondary'>Вернуть на доработку</button></> : null}
         </div></form></details>}
-        {owner && task.workflow !== 'выполнена' && !waiting ? <details><summary>Передать ответственность</summary><form className='work-form' action={form => submit('handover', form, { task: task.id, version: task.version })}><label>Кто принимает<select name='employee' required defaultValue=''><option value=''>Выберите сотрудника</option>{data!.people.filter(person => person.id !== data!.user.id).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Что произошло и что осталось сделать<textarea name='comment' required maxLength={4000} /></label><button>Предложить передачу</button></form></details> : null}
+        {owner && !task.initiative && task.workflow !== 'выполнена' && !waiting ? <details><summary>Передать ответственность</summary><form className='work-form' action={form => submit('handover', form, { task: task.id, version: task.version })}><label>Кто принимает<select name='employee' required defaultValue=''><option value=''>Выберите сотрудника</option>{data!.people.filter(person => person.id !== data!.user.id).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Что произошло и что осталось сделать<textarea name='comment' required maxLength={4000} /></label><button>Предложить передачу</button></form></details> : null}
         {waiting && <div className='work-handover'><p>{waiting.from_name} → {waiting.to_name}</p><p>{waiting.note}</p><p>Ответственность остаётся у передающего до принятия.</p>{waiting.to_id === data!.user.id && <button onClick={() => send('takeover', { task: task.id, version: task.version })}>Принимаю ответственность</button>}{owner ? <button className='secondary' onClick={() => send('cancelHandover', { task: task.id, version: task.version })}>Отменить передачу</button> : null}</div>}
       </fieldset>
       <details><summary>История изменений</summary>{data!.events.filter(event => event.task_id === task.id).map(event => <div className='work-event' key={event.id}><b>{event.action}</b><p>{event.name} · {date(event.created_at)}</p>{event.comment && <p>{event.comment}</p>}{event.has_photo ? <a href={`/api/photos/${event.id}`} target='_blank' rel='noreferrer'>Открыть фотографию</a> : null}</div>)}</details>
@@ -207,8 +210,13 @@ export default function Workspace() {
     {tab === 'Задачи' && <>
       <div className='work-section-heading'><div><p>ВАШ ПЛАН НА СЕГОДНЯ</p><h2>Задачи <span>{shownTasks.length}</span></h2></div><Clock3 size={20} /></div>
       <div className='work-filters'><label>Показать<select value={filter} onChange={event => setFilter(event.target.value)}><option value='active'>Незавершённые</option><option value='mine'>Мои</option><option value='overdue'>Просроченные</option><option value='review'>На проверке</option><option value='all'>Все</option></select></label><label>Отдел<select value={department} onChange={event => setDepartment(event.target.value)}><option value=''>Все доступные</option>{data.departments.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
+      <div className='work-actions'>{['Список', 'Календарь'].map(item => <button className={view === item ? '' : 'secondary'} aria-pressed={view === item} key={item} onClick={() => { setView(item); setSelectedTask(null) }}>{item}</button>)}{Boolean(data.user.is_superadmin) && <label><input type='checkbox' checked={grouped} onChange={event => setGrouped(event.target.checked)} /> Группировать по отделам</label>}</div>
+      <details className='content-card'><summary>Создать личную инициативу</summary><form className='work-form' action={form => submit('initiative', form)}><fieldset disabled={busy}><p>Видна только вам. Можно менять и удалять без согласования.</p><label>Название<input name='title' required maxLength={200} /></label><label>Описание<textarea name='description' required maxLength={4000} /></label><label>Срок (Москва)<input name='deadline' type='datetime-local' required /></label><label>Приоритет<select name='priority' defaultValue='средний'><option>низкий</option><option>средний</option><option>высокий</option></select></label><button>Создать инициативу</button></fieldset></form></details>
       {manager && <details className='content-card' open={createOpen} onToggle={event => setCreateOpen(event.currentTarget.open)}><summary>Назначить задачу</summary><form className='work-form' action={form => submit('create', form)}><fieldset disabled={busy}>{recipients}<label>Название<input name='title' required maxLength={200} /></label><label>Описание<textarea name='description' required maxLength={4000} /></label><label>Срок (Москва)<input name='deadline' type='datetime-local' required /></label><label>Приоритет<select name='priority' defaultValue='средний'><option>низкий</option><option>средний</option><option>высокий</option></select></label><label>Смена<select name='shift'><option value=''>Без смены</option>{data.shifts.filter(shift => !shift.closed_at && (data.user.is_superadmin || shift.created_by === data.user.id || shift.owner_id === data.user.id)).map(shift => <option key={shift.id} value={shift.id}>{shift.title} · {date(shift.starts_at)}</option>)}</select></label>{requirements}<button>Назначить</button></fieldset></form></details>}
-      <div className='work-cards'>{shownTasks.map(taskCard)}</div>{!shownTasks.length && <div className='work-empty'><CheckCircle2 size={28} /><h3>Здесь пока спокойно</h3><p>Задач по выбранному фильтру нет.</p></div>}
+      {view === 'Календарь' ? <><TaskCalendar tasks={shownTasks} today={now || data.generatedAt} onSelect={setSelectedTask} />{selectedTask !== null && shownTasks.filter(task => task.id === selectedTask).map(taskCard)}</> : data.user.is_superadmin && grouped ? [...data.departments, { id: 0, name: 'Без отдела / Личные инициативы', assignable: false }].map(group => {
+        const tasks = shownTasks.filter(task => (task.initiative ? 0 : task.department_id || data.people.find(person => person.id === task.assigned_to)?.department || 0) === group.id)
+        return tasks.length ? <section key={group.id}><h2>{group.name} · {tasks.length}</h2><div className='work-cards'>{tasks.map(taskCard)}</div></section> : null
+      }) : <div className='work-cards'>{shownTasks.map(taskCard)}</div>}{!shownTasks.length && <div className='work-empty'><CheckCircle2 size={28} /><h3>Здесь пока спокойно</h3><p>Задач по выбранному фильтру нет.</p></div>}
     </>}
     {tab === 'Смены' && <>
       {manager && <details className='content-card'><summary>Запланировать смену</summary><form className='work-form' action={form => submit('shift', form)}><fieldset disabled={busy}><label>Название<input name='title' required maxLength={200} placeholder='Утренняя смена' /></label><label>Ответственный<select name='employee' required><option value=''>Выберите</option>{data.people.filter(person => person.assignable).map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label><label>Начало (Москва)<input name='start' type='datetime-local' required /></label><label>Окончание (Москва)<input name='end' type='datetime-local' required /></label><button>Создать смену</button></fieldset></form></details>}
@@ -222,11 +230,14 @@ export default function Workspace() {
       {manager && <details className='content-card'><summary>Опубликовать объявление</summary><form className='work-form' action={form => submit('publish', form)}><fieldset disabled={busy}><label>Заголовок<input name='title' required maxLength={200} /></label><label>Сообщение<textarea name='content' required maxLength={4000} /></label><label>Категория<select name='category'><option>объявление</option><option>срочное</option><option>инструкция</option></select></label><button>Опубликовать</button></fieldset></form></details>}
       {data.notices.map(notice => <article key={notice.id} className='content-card'><span className='work-meta'>{notice.category}</span><h2>{notice.title}</h2><p className='work-description'>{notice.content}</p><button disabled={busy || Boolean(notice.acknowledged) || pending.some(item => item.notice === notice.id)} onClick={() => send('ack', { notice: notice.id })}>{notice.acknowledged ? 'Вы ознакомлены' : 'Ознакомлен'}</button>{manager && <details><summary>Ознакомились: {notice.read_count}</summary>{data.acknowledgements.filter(item => item.update_id === notice.id).map((item, index) => <p key={index}>{item.name}</p>)}</details>}</article>)}
     </>}
-    {tab === 'Отделы' && <>{data.departments.map(item => {
+    {tab === 'Отделы' && <>{Boolean(data.user.is_superadmin) && <section className='content-card'><h2>Главные администраторы</h2><p>Любой главный администратор может назначить другого. Последнего снять нельзя.</p>{data.people.map(person => {
+      const queued = pending.some(item => item.kind === 'superadmin' && item.person === person.id)
+      return <div className='work-heading' key={person.id}><span>{person.name}{person.is_superadmin ? ' · Главный администратор' : ''}{queued ? ' · Ожидает синхронизации' : ''}</span><button className='secondary' disabled={busy || queued} onClick={() => send('superadmin', { person: person.id, enabled: !person.is_superadmin, previous: person.is_superadmin })}>{person.is_superadmin ? 'Снять права' : 'Назначить главным'}</button></div>
+    })}</section>}{data.departments.map(item => {
       const tasks = data.tasks.filter(task => task.department_id === item.id || data.people.find(person => person.id === task.assigned_to)?.department === item.id)
       return <article key={item.id} className='content-card'><h2>{item.name}</h2><p>Открыто: {tasks.filter(task => task.workflow !== 'выполнена').length} · Просрочено: {tasks.filter(overdue).length} · На проверке: {tasks.filter(task => task.workflow === 'на проверке').length} · Выполнено: {tasks.filter(task => task.workflow === 'выполнена').length}</p><p>{data.people.filter(person => person.department === item.id).map(person => person.name).join(', ') || 'Сотрудники не назначены'}</p><button onClick={() => { setDepartment(String(item.id)); setFilter('all'); setTab('Задачи') }}>Открыть задачи отдела</button></article>
     })}{!data.departments.length && <p>Отдел не назначен. Обратитесь к администратору.</p>}</>}
     {tab === 'История' && <><h2>Журнал действий</h2>{data.activity.map(event => <article className='content-card' key={event.id}><p>{actionLabels[event.kind] || 'Изменение срока'} · {event.name}</p><small>{date(event.created_at)}</small></article>)}{!data.activity.length && <p>Изменений пока нет.</p>}</>}
-    {tab === 'Уведомления' && <><button disabled={busy} onClick={() => void enablePush()}>Включить push-уведомления</button>{data.notifications.length > 0 && <button className='secondary' disabled={busy} onClick={() => send('read', { notification: data.notifications[0].id })}>Отметить все прочитанными</button>}{data.notifications.map(item => <article className='content-card' key={item.id}><p>{!item.read_at ? '● ' : ''}{item.message}</p></article>)}{!data.notifications.length && <p>Новых уведомлений нет.</p>}</>}
+    {tab === 'Уведомления' && <><section className='content-card'><h2>Напоминания о сроках</h2>{settingsOperation && <p role='status'>Настройки ожидают синхронизации</p>}<form className='work-form' key={JSON.stringify(data.notificationSettings)} action={form => submit('settings', form)}><fieldset disabled={busy}><label><input type='checkbox' name='enabled' defaultChecked={Boolean(data.notificationSettings?.enabled ?? 1)} /> Напоминать о задачах</label><label>Начать за сколько дней до срока<input type='number' name='advance_days' min='0' max='365' required defaultValue={data.notificationSettings?.advance_days ?? 3} /></label><label>Повторять каждые (часов)<input type='number' name='repeat_hours' min='1' max='720' required defaultValue={data.notificationSettings?.repeat_hours ?? 24} /></label><p>Напоминания продолжаются до завершения задачи. Уведомления о действиях приходят независимо от этих настроек.</p><p>Без сети настройки сохраняются в очереди. Новые уведомления поступят после подключения.</p><button>Сохранить напоминания</button></fieldset></form></section><button disabled={busy} onClick={() => void enablePush()}>Включить push-уведомления</button>{data.notifications.length > 0 && <button className='secondary' disabled={busy} onClick={() => send('read', { notification: data.notifications[0].id })}>Отметить все прочитанными</button>}{data.notifications.map(item => <article className='content-card' key={item.id}><p>{!item.read_at ? '● ' : ''}{item.message}</p></article>)}{!data.notifications.length && <p>Новых уведомлений нет.</p>}</>}
   </div>
 }

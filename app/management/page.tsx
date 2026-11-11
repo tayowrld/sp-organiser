@@ -25,9 +25,9 @@ export default async function ManagementPage() {
   const employees = db.prepare(`SELECT id, name, role FROM users WHERE is_active = 1 AND ${user.is_superadmin ? 'id != ?' : 'manager_id = ?'}`).all(user.id) as Employee[]
 
   const stats = employees.map((emp) => {
-    const totalRow = db.prepare('SELECT COUNT(*) as c FROM tasks WHERE assigned_to = ?').get(emp.id) as { c: number } | undefined
-    const doneRow = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE assigned_to = ? AND status = 'выполнена'").get(emp.id) as { c: number } | undefined
-    const overdueRow = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE assigned_to = ? AND status != 'выполнена' AND typeof(deadline) = 'integer' AND deadline < unixepoch('subsec') * 1000").get(emp.id) as { c: number } | undefined
+    const totalRow = db.prepare('SELECT COUNT(*) as c FROM tasks WHERE deleted = 0 AND initiative = 0 AND assigned_to = ?').get(emp.id) as { c: number } | undefined
+    const doneRow = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE deleted = 0 AND initiative = 0 AND assigned_to = ? AND status = 'выполнена'").get(emp.id) as { c: number } | undefined
+    const overdueRow = db.prepare("SELECT COUNT(*) as c FROM tasks WHERE deleted = 0 AND initiative = 0 AND assigned_to = ? AND status != 'выполнена' AND typeof(deadline) = 'integer' AND deadline < unixepoch('subsec') * 1000").get(emp.id) as { c: number } | undefined
     return { ...emp, department: getDepartment(getPerson(emp.id)!)?.name, total: Number(totalRow?.c ?? 0), done: Number(doneRow?.c ?? 0), overdue: Number(overdueRow?.c ?? 0) }
   })
 

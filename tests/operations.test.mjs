@@ -21,7 +21,7 @@ function create(extra = {}) {
 }
 function change(actor, kind, id, extra = {}) { op(actor, kind, { task: id, version: task(id).version, ...extra }) }
 before(() => {
-  const program = ts.createProgram(['app/operations/index.ts'], { outDir: join(directory, 'compiled'), module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true, skipLibCheck: true, strict: true })
+  const program = ts.createProgram(['app/operations/index.ts', 'app/work/projection.ts'], { outDir: join(directory, 'compiled'), module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true, skipLibCheck: true, strict: true })
   assert.equal(ts.getPreEmitDiagnostics(program).length, 0)
   program.emit()
   symlinkSync(resolve('node_modules'), join(directory, 'node_modules'))
@@ -137,4 +137,109 @@ test('резервная копия содержит фотографии и п�
   assert.equal(copy.pragma('integrity_check', { simple: true }), 'ok')
   assert.ok(copy.prepare('SELECT COUNT(*) AS n FROM task_events WHERE photo IS NOT NULL').get().n > 0)
   copy.close()
+})
+
+test('инициативы личные, редактируются и удаляются автором без уведомления руководителя', () => {
+  const before = db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?').get(manager.id).n
+  op(employee, 'initiative', { title: 'Моя идея', description: 'Личный план', deadline: '2026-12-01T12:00', require_review: true })
+  const item = db.prepare('SELECT * FROM tasks ORDER BY id DESC LIMIT 1').get()
+  assert.ok(!snapshot(manager).activity.some(event => event.user_id === employee.id && event.kind === 'initiative'))
+  assert.equal(item.initiative, 1)
+  assert.equal(item.require_review, 0)
+  assert.ok(snapshot(employee).tasks.some(row => row.id === item.id))
+  assert.ok(!snapshot(manager).tasks.some(row => row.id === item.id))
+  assert.throws(() => change(manager, 'delete', item.id), /недоступна/)
+  change(employee, 'edit', item.id, { title: 'Новая идея', description: 'План', deadline: '2026-12-02T12:00', priority: 'низкий' })
+  assert.equal(task(item.id).title, 'Новая идея')
+  change(employee, 'delete', item.id)
+  assert.ok(!snapshot(employee).tasks.some(row => row.id === item.id))
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?').get(manager.id).n, before)
+})
+
+test('поручение защищено от изменения исполнителем, запрос удаления получает автор', () => {
+  const item = create()
+  for (const kind of ['edit', 'delete', 'reschedule']) assert.throws(() => change(employee, kind, item.id), error => error.status === 403)
+  change(employee, 'requestDelete', item.id, { comment: 'Больше не актуально' })
+  assert.equal(task(item.id).deletion_requested, 1)
+  assert.ok(db.prepare("SELECT id FROM notifications WHERE user_id = ? AND message LIKE '%Запрошено удаление%Больше не актуально%'").get(manager.id))
+  change(manager, 'denyDelete', item.id, { comment: 'Нужно закончить' })
+  assert.equal(task(item.id).deletion_requested, 0)
+  change(employee, 'requestDelete', item.id, { comment: 'Повторный запрос' })
+  change(manager, 'delete', item.id)
+  assert.equal(task(item.id).deleted, 1)
+  assert.ok(!snapshot(employee).tasks.some(row => row.id === item.id))
+  assert.ok(db.prepare("SELECT id FROM notifications WHERE user_id = ? AND message LIKE '%Задача удалена%'").get(employee.id))
+})
+
+test('напоминания за три дня повторяются, не дублируются и прекращаются после завершения', () => {
+  const item = create({ deadline: '2027-01-04T12:00' })
+  op(employee, 'settings', { enabled: true, advance_days: 3, repeat_hours: 6 })
+  const count = () => db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND dedupe LIKE ?').get(employee.id, `reminder:${item.id}:%`).n
+  const start = Date.parse('2027-01-01T09:00:00Z')
+  runRecurring(start - 1)
+  assert.equal(count(), 0)
+  runRecurring(start)
+  runRecurring(start + 1)
+  assert.equal(count(), 1)
+  runRecurring(start + 6 * 3600000)
+  assert.equal(count(), 2)
+  op(employee, 'settings', { enabled: false, advance_days: 3, repeat_hours: 6 })
+  runRecurring(start + 12 * 3600000)
+  assert.equal(count(), 2)
+  op(employee, 'settings', { enabled: true, advance_days: 3, repeat_hours: 6 })
+  change(employee, 'accept', item.id)
+  change(employee, 'complete', item.id)
+  runRecurring(start + 18 * 3600000)
+  assert.equal(count(), 2)
+  assert.throws(() => op(employee, 'settings', { advance_days: -1, repeat_hours: 0 }), /Укажите/)
+})
+
+test('любой главный администратор назначает других, последний защищён, устаревшие права не принимаются', () => {
+  db.prepare('UPDATE users SET is_superadmin = 1 WHERE id = ?').run(stranger.id)
+  const root = getPerson(stranger.id)
+  assert.throws(() => op(employee, 'superadmin', { person: colleague.id, enabled: true, previous: 0 }), error => error.status === 403)
+  op(root, 'superadmin', { person: colleague.id, enabled: true, previous: 0 })
+  const second = getPerson(colleague.id)
+  op(second, 'superadmin', { person: employee.id, enabled: true, previous: 0 })
+  assert.equal(getPerson(employee.id).is_superadmin, 1)
+  op(root, 'superadmin', { person: colleague.id, enabled: false, previous: 1 })
+  assert.throws(() => op(second, 'superadmin', { person: manager.id, enabled: true, previous: 0 }), error => error.status === 403)
+  op(root, 'superadmin', { person: employee.id, enabled: false, previous: 1 })
+  assert.throws(() => op(root, 'superadmin', { person: root.id, enabled: false, previous: 1 }), /последнего/)
+  db.prepare('UPDATE users SET is_superadmin = 0 WHERE id = ?').run(root.id)
+})
+
+test('цепочка создания, изменения и удаления без сети синхронизируется по UUID один раз', () => {
+  const creation = { id: randomUUID(), kind: 'initiative', userId: employee.id, title: 'Офлайн', description: 'План', deadline: '2027-01-01T12:00', priority: 'средний' }
+  const projectTasks = require(join(directory, 'compiled/work/projection.js')).projectTasks
+  const local = projectTasks([], [creation], employee.id)[0]
+  assert.ok(local.id < 0)
+  const edit = { id: randomUUID(), kind: 'edit', userId: employee.id, taskOperation: creation.id, version: 0, title: 'Изменено без сети', description: 'План 2', deadline: '2027-01-02T12:00', priority: 'высокий' }
+  const remove = { id: randomUUID(), kind: 'delete', userId: employee.id, taskOperation: creation.id, version: 1 }
+  assert.equal(projectTasks([], [creation, edit], employee.id)[0].title, edit.title)
+  assert.equal(projectTasks([], [creation, edit], employee.id)[0].version, 1)
+  assert.equal(projectTasks([], [creation, edit, remove], employee.id).length, 0)
+  for (const operation of [creation, edit, remove]) { applyOperation(employee, operation); applyOperation(employee, operation) }
+  const saved = db.prepare('SELECT * FROM tasks WHERE client_id = ?').get(creation.id)
+  assert.equal(saved.title, edit.title)
+  assert.equal(saved.deleted, 1)
+  assert.equal(saved.version, 2)
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM task_events WHERE task_id = ?').get(saved.id).n, 3)
+})
+
+test('изменения задачи уведомляют автора и исполнителя, повторы и отказы не создают событий', () => {
+  const item = create()
+  const counts = id => db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ?').get(id).n
+  for (const [actor, kind, fields] of [[employee, 'accept', {}], [employee, 'problem', { comment: 'Нужно оборудование' }], [manager, 'reschedule', { deadline: '2027-01-10T12:00', comment: 'Ожидаем поставку' }], [employee, 'complete', { comment: 'Готово' }]]) {
+    const before = [counts(manager.id), counts(employee.id), counts(stranger.id)]
+    const operation = { id: randomUUID(), kind, task: item.id, version: task(item.id).version, ...fields }
+    applyOperation(actor, operation)
+    applyOperation(actor, operation)
+    assert.equal(counts(manager.id), before[0] + 1)
+    assert.equal(counts(employee.id), before[1] + 1)
+    assert.equal(counts(stranger.id), before[2])
+  }
+  const before = counts(employee.id)
+  assert.throws(() => change(employee, 'delete', item.id))
+  assert.equal(counts(employee.id), before)
 })

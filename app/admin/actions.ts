@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getUser } from '../auth/actions'
 import { hashPassword } from '../auth/lib'
 import db from '../db'
+import { notify } from '../operations'
 import { canManagePerson, getPerson, validManager } from '../people'
 
 export async function savePerson(_state: { error: string; success: string }, data: FormData) {
@@ -37,11 +38,13 @@ export async function savePerson(_state: { error: string; success: string }, dat
       if (!currentActor?.is_active || currentActor.is_admin !== actor.is_admin || currentActor.is_superadmin !== actor.is_superadmin) throw new Error('Доступ изменён')
       if (id && (!currentTarget || !canManagePerson(currentActor, currentTarget))) throw new Error('Доступ изменён')
       if (!validManager(id || -1, managerId)) throw new Error('Руководитель изменён')
+      let savedId = id
       if (id) {
         db.prepare('UPDATE users SET name = ?, email = ?, manager_id = ?, is_admin = ?, is_active = ?, department_id = ?, password_hash = COALESCE(?, password_hash) WHERE id = ?').run(name, email, managerId, isAdmin, isActive, departmentId, hash, id)
       } else {
-        db.prepare("INSERT INTO users (name, email, password_hash, role, manager_id, is_admin, is_active, department_id) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?)").run(name, email, hash, managerId, isAdmin, isActive, departmentId)
+        savedId = Number(db.prepare("INSERT INTO users (name, email, password_hash, role, manager_id, is_admin, is_active, department_id) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?)").run(name, email, hash, managerId, isAdmin, isActive, departmentId).lastInsertRowid)
       }
+      for (const recipient of new Set([actor.id, savedId, managerId, target?.manager_id].filter((value): value is number => typeof value === 'number'))) notify(recipient, `${actor.name}: ${id ? 'изменён' : 'создан'} пользователь ${name}`)
     })()
   } catch {
     return fail('Не удалось сохранить пользователя. Проверьте данные и повторите попытку.')
@@ -58,7 +61,10 @@ export async function createDepartment(_state: { error: string; success: string 
   const departments = db.prepare('SELECT name FROM departments').all() as { name: string }[]
   if (departments.some(department => department.name.toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU'))) return { error: 'Такой отдел уже существует.', success: '' }
   try {
-    db.prepare('INSERT INTO departments (name) VALUES (?)').run(name)
+    db.transaction(() => {
+      db.prepare('INSERT INTO departments (name) VALUES (?)').run(name)
+      for (const person of db.prepare('SELECT id FROM users WHERE is_superadmin = 1 AND is_active = 1').all() as { id: number }[]) notify(person.id, `${actor.name}: создан отдел ${name}`)
+    })()
   } catch {
     return { error: 'Не удалось создать отдел. Проверьте название.', success: '' }
   }
