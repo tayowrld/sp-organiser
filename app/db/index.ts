@@ -81,6 +81,7 @@ db.transaction(() => {
     occurrence: 'TEXT',
     initiative: 'INTEGER NOT NULL DEFAULT 0',
     client_id: 'TEXT',
+    reminder_hours: 'INTEGER',
     deleted: 'INTEGER NOT NULL DEFAULT 0',
     deletion_requested: 'INTEGER NOT NULL DEFAULT 0',
   })) {

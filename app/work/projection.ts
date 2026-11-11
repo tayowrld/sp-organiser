@@ -8,6 +8,7 @@ export function projectTasks(tasks: Task[], pending: Pending[], userId: number) 
       if (projected.some(task => task.client_id === operation.id)) continue
       projected.unshift({
         id: -Number.parseInt(operation.id.replace(/-/g, '').slice(0, 12), 16),
+        reminder_hours: operation.reminder_hours === undefined || operation.reminder_hours === 'previous-day' ? null : Number(operation.reminder_hours),
         client_id: operation.id, initiative: Number(operation.kind === 'initiative'), deleted: 0, deletion_requested: 0,
         title: String(operation.title), description: String(operation.description),
         deadline: Date.parse(`${operation.deadline}:00+03:00`), priority: String(operation.priority || 'средний'),
@@ -26,6 +27,7 @@ export function projectTasks(tasks: Task[], pending: Pending[], userId: number) 
     if (operation.kind === 'problem') task.workflow = 'проблема'
     if (operation.kind === 'approve') task.workflow = 'выполнена'
     if (operation.kind === 'reject') task.workflow = 'в работе'
+    if (operation.kind === 'edit' && operation.reminder_hours !== undefined) task.reminder_hours = operation.reminder_hours === 'previous-day' ? null : Number(operation.reminder_hours)
     if (operation.kind === 'edit') { task.title = String(operation.title); task.description = String(operation.description); task.priority = String(operation.priority) }
     if (operation.kind === 'edit' || operation.kind === 'reschedule') task.deadline = Date.parse(`${operation.deadline}:00+03:00`)
     if (operation.kind === 'delete') task.deleted = 1

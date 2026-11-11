@@ -3,6 +3,7 @@ import { canAssignTask, getDepartment, getPerson, type Person } from '../people'
 import { parseDeadline } from '../dates'
 
 export type Task = {
+  reminder_hours: number | null
   client_id: string | null
   initiative: number
   deleted: number
@@ -63,6 +64,13 @@ function recipient(user: Person, input: Operation) {
   if (!canAssignTask(user, employee)) fail('Нет права назначать задачи этому сотруднику', 403)
   return { employee, department: null, claimed: 1 }
 }
+function reminderHours(value: unknown) {
+  if (value === undefined || value === 'previous-day' || value === null) return null
+  const hours = Number(value)
+  if (!Number.isInteger(hours) || hours < 0 || hours > 8760) fail('Укажите время подготовки от 0 до 8760 часов')
+  return hours
+}
+
 function addTask(user: Person, input: Operation) {
   const initiative = input.kind === 'initiative'
   const target = initiative ? { employee: user.id, department: null, claimed: 1 } : recipient(user, input)
@@ -74,6 +82,7 @@ function addTask(user: Person, input: Operation) {
   if (shiftId && !db.prepare('SELECT id FROM shifts WHERE id = ? AND closed_at IS NULL AND (created_by = ? OR owner_id = ? OR ? = 1)').get(shiftId, user.id, user.id, user.is_superadmin)) fail('Смена недоступна')
   const priority = ['низкий', 'средний', 'высокий'].includes(String(input.priority)) ? String(input.priority) : 'средний'
   const result = db.prepare(`INSERT INTO tasks (title, description, deadline, status, priority, assigned_to, created_by, department_id, claimed, require_comment, require_photo, require_review, shift_id) VALUES (?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, description, deadline, priority, target.employee, user.id, target.department, target.claimed, input.require_comment ? 1 : 0, input.require_photo ? 1 : 0, initiative ? 0 : input.require_review ? 1 : 0, initiative ? null : shiftId)
+  db.prepare('UPDATE tasks SET reminder_hours = ? WHERE id = ?').run(reminderHours(input.reminder_hours), result.lastInsertRowid)
   if (initiative) db.prepare('UPDATE tasks SET initiative = 1 WHERE id = ?').run(result.lastInsertRowid)
   db.prepare('UPDATE tasks SET client_id = ? WHERE id = ?').run(input.id, result.lastInsertRowid)
   audit(Number(result.lastInsertRowid), user.id, 'Задача создана')
@@ -107,11 +116,6 @@ export function applyOperation(user: Person, input: Operation) {
       if (!enabled && target.is_superadmin && (db.prepare('SELECT COUNT(*) AS n FROM users WHERE is_superadmin = 1 AND is_active = 1').get() as { n: number }).n <= 1) fail('Нельзя снять права последнего главного администратора')
       db.prepare('UPDATE users SET is_superadmin = ? WHERE id = ?').run(Number(enabled), target.id)
       for (const id of new Set([target.id, user.id, ...(db.prepare('SELECT id FROM users WHERE is_superadmin = 1 AND is_active = 1').all() as { id: number }[]).map(person => person.id)])) notify(id, `${user.name}: ${enabled ? 'назначен главным администратором' : 'сняты права главного администратора'} — ${target.name}`)
-    } else if (input.kind === 'settings') {
-      const days = Number(input.advance_days), hours = Number(input.repeat_hours)
-      if (!Number.isInteger(days) || days < 0 || days > 365 || !Number.isInteger(hours) || hours < 1 || hours > 720) fail('Укажите от 0 до 365 дней и от 1 до 720 часов')
-      db.prepare('INSERT INTO notification_settings VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET advance_days = excluded.advance_days, repeat_hours = excluded.repeat_hours, enabled = excluded.enabled').run(user.id, days, hours, input.enabled ? 1 : 0)
-      notify(user.id, 'Настройки напоминаний сохранены')
     } else if (input.kind === 'publish') {
       if (!isManager(user)) fail('Публиковать может руководитель', 403)
       const title = text(input.title, 200), content = text(input.content)
@@ -172,6 +176,7 @@ export function applyOperation(user: Person, input: Operation) {
           const deadline = parseDeadline(text(input.deadline))
           const title = text(input.title, 200), description = text(input.description), priority = text(input.priority)
           if (!title || !description || deadline === null || !['низкий', 'средний', 'высокий'].includes(priority)) fail('Проверьте название, описание, срок и приоритет')
+          if (input.reminder_hours !== undefined) db.prepare('UPDATE tasks SET reminder_hours = ? WHERE id = ?').run(reminderHours(input.reminder_hours), task.id)
           db.prepare('UPDATE tasks SET title = ?, description = ?, deadline = ?, priority = ? WHERE id = ?').run(title, description, deadline, priority, task.id)
         }
       } else if (input.kind === 'requestDelete') {
@@ -257,18 +262,14 @@ export function runRecurring(now = Date.now()) {
       const recipients = task.initiative ? [task.created_by] : [task.created_by, ...(task.department_id && !task.claimed ? departmentMembers(task.department_id).map(person => person.id) : [task.assigned_to])]
       for (const id of new Set(recipients)) {
         if (!getPerson(id)?.is_active) continue
-        const settings = notificationSettings(id)
-        const start = Number(task.deadline) - settings.advance_days * 86400000
-        if (!settings.enabled || now < start) continue
-        const slot = Math.floor((now - start) / (settings.repeat_hours * 3600000))
-        notify(id, `${Number(task.deadline) < now ? 'Просрочена задача' : 'Напоминание о сроке'}: ${task.title}`, `reminder:${task.id}:${task.deadline}:${id}:${settings.advance_days}:${settings.repeat_hours}:${slot}`)
+        const deadline = Number(task.deadline)
+        const start = task.reminder_hours === null ? Math.floor((deadline + 10800000) / 86400000) * 86400000 - 86400000 + 9 * 3600000 : deadline - task.reminder_hours * 3600000
+        if (now < start) continue
+        const slot = Math.floor((now - start) / (4 * 3600000))
+        notify(id, `${deadline < now ? 'Просрочена задача' : 'Напоминание о сроке'}: ${task.title}`, `reminder:${task.id}:${deadline}:${id}:${task.reminder_hours ?? 'previous-day'}:${slot}`)
       }
     }
   })()
-}
-
-function notificationSettings(id: number) {
-  return db.prepare('SELECT advance_days, repeat_hours, enabled FROM notification_settings WHERE user_id = ?').get(id) as { advance_days: number; repeat_hours: number; enabled: number } | undefined ?? { advance_days: 3, repeat_hours: 24, enabled: 1 }
 }
 
 export function snapshot(user: Person) {
@@ -278,7 +279,6 @@ export function snapshot(user: Person) {
   const people = (db.prepare('SELECT id FROM users WHERE is_active = 1').all() as { id: number }[]).map(row => getPerson(row.id)!).filter(person => user.is_superadmin || person.id === user.id || tasks.some(task => task.created_by === person.id) || canAssignTask(user, person.id) || person.manager_id === user.manager_id && user.manager_id !== null || getDepartment(user)?.id && getDepartment(user)?.id === getDepartment(person)?.id)
   return {
     user: { ...user, manager: isManager(user) },
-    notificationSettings: notificationSettings(user.id),
     tasks,
     people: people.map(person => ({ id: person.id, name: person.name, is_superadmin: person.is_superadmin, assignable: canAssignTask(user, person.id), department: getDepartment(person)?.id ?? null })),
     departments: (db.prepare('SELECT * FROM departments').all() as { id: number; name: string }[]).filter(department => user.is_superadmin || getDepartment(user)?.id === department.id).map(department => ({ ...department, assignable: managesDepartment(user, department.id) })),
