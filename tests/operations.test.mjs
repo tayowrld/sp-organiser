@@ -75,12 +75,21 @@ test('повтор отправки не дублирует событие, ус
 })
 
 test('задачу отдела может занять только один сотрудник своего отдела', () => {
-  const item = create({ department })
+  const item = create({ department, employee: '' })
   assert.equal(item.claimed, 0)
   assert.throws(() => change(stranger, 'accept', item.id), /недоступна/)
   change(colleague, 'accept', item.id)
   assert.equal(task(item.id).assigned_to, colleague.id)
   assert.throws(() => change(employee, 'accept', item.id), /нельзя принять/)
+})
+
+test('задача отдела сохраняет выбранного ответственного и первоначальную фотографию', () => {
+  const item = create({ department, employee: colleague.id, photo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=' })
+  assert.equal(item.department_id, department)
+  assert.equal(item.assigned_to, colleague.id)
+  assert.equal(item.claimed, 1)
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM task_events WHERE task_id = ? AND action = 'Задача создана' AND photo IS NOT NULL").get(item.id).n, 1)
+  assert.throws(() => create({ department, employee: stranger.id }), /недоступен/)
 })
 
 test('смена не закрывается до принятия незавершённой задачи', () => {

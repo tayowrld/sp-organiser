@@ -59,6 +59,10 @@ function recipient(user: Person, input: Operation) {
     if (!managesDepartment(user, department)) fail('Нет права назначать задачи этому отделу', 403)
     const members = departmentMembers(department)
     if (!members.length) fail('В отделе нет активных сотрудников')
+    if (employee) {
+      if (!members.some(person => person.id === employee) || !canAssignTask(user, employee)) fail('Выбранный сотрудник недоступен в этом отделе', 403)
+      return { employee, department, claimed: 1 }
+    }
     return { employee: members[0].id, department, claimed: 0 }
   }
   if (!canAssignTask(user, employee)) fail('Нет права назначать задачи этому сотруднику', 403)
@@ -81,18 +85,19 @@ function addTask(user: Person, input: Operation) {
   const shiftId = number(input.shift) || null
   if (shiftId && !db.prepare('SELECT id FROM shifts WHERE id = ? AND closed_at IS NULL AND (created_by = ? OR owner_id = ? OR ? = 1)').get(shiftId, user.id, user.id, user.is_superadmin)) fail('Смена недоступна')
   const priority = ['низкий', 'средний', 'высокий'].includes(String(input.priority)) ? String(input.priority) : 'средний'
+  const { photo, mime } = attachment(input.photo)
   const result = db.prepare(`INSERT INTO tasks (title, description, deadline, status, priority, assigned_to, created_by, department_id, claimed, require_comment, require_photo, require_review, shift_id) VALUES (?, ?, ?, 'новая', ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, description, deadline, priority, target.employee, user.id, target.department, target.claimed, input.require_comment ? 1 : 0, input.require_photo ? 1 : 0, initiative ? 0 : input.require_review ? 1 : 0, initiative ? null : shiftId)
   db.prepare('UPDATE tasks SET reminder_hours = ? WHERE id = ?').run(reminderHours(input.reminder_hours), result.lastInsertRowid)
   if (initiative) db.prepare('UPDATE tasks SET initiative = 1 WHERE id = ?').run(result.lastInsertRowid)
   db.prepare('UPDATE tasks SET client_id = ? WHERE id = ?').run(input.id, result.lastInsertRowid)
-  audit(Number(result.lastInsertRowid), user.id, 'Задача создана')
+  audit(Number(result.lastInsertRowid), user.id, 'Задача создана', '', photo, mime)
   for (const id of new Set([user.id, ...(target.department ? departmentMembers(target.department).map(person => person.id) : [target.employee])])) notify(id, `Новая задача: ${title}`)
 }
 function attachment(value: unknown) {
   if (!value) return { photo: null, mime: null }
-  const match = typeof value === 'string' && value.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/)
+  const match = typeof value === 'string' && value.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/)
   if (!match) return fail('Допустимы фотографии JPEG, PNG или WebP')
-  const photo = Buffer.from(match[2], 'base64')
+  const photo = Buffer.from(match[2].replace(/\s/g, ''), 'base64')
   if (photo.length > 4 * 1024 * 1024) fail('Фотография должна быть меньше 4 МБ')
   const valid = match[1] === 'image/jpeg' ? photo.subarray(0, 3).equals(Buffer.from([255, 216, 255])) : match[1] === 'image/png' ? photo.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) : photo.toString('ascii', 0, 4) === 'RIFF' && photo.toString('ascii', 8, 12) === 'WEBP'
   if (!valid) fail('Файл не является фотографией указанного формата')
