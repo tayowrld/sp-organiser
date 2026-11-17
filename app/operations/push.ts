@@ -10,12 +10,12 @@ export async function deliverNotifications() {
   const users = db.prepare('SELECT DISTINCT user_id FROM notifications WHERE pushed_at IS NULL AND read_at IS NULL').all() as { user_id: number }[]
   let delivered = 0
   for (const { user_id } of users) {
-    const last = db.prepare('SELECT MAX(id) AS id FROM notifications WHERE user_id = ?').get(user_id) as { id: number }
+    const last = db.prepare('SELECT id, message FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(user_id) as { id: number; message: string }
     const subscriptions = db.prepare('SELECT * FROM subscriptions WHERE user_id = ?').all(user_id) as { endpoint: string; subscription: string }[]
     let success = subscriptions.length > 0
     for (const subscription of subscriptions) {
       try {
-        await webpush.sendNotification(JSON.parse(subscription.subscription), JSON.stringify({}), { TTL: 3600, timeout: 10000 })
+        await webpush.sendNotification(JSON.parse(subscription.subscription), JSON.stringify({ title: 'СП Организатор', body: last.message, url: '/work?tab=notifications', tag: `sp-notification-${last.id}` }), { TTL: 3600, timeout: 10000 })
         delivered++
       } catch (error) {
         const code = (error as { statusCode?: number }).statusCode

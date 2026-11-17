@@ -1,4 +1,4 @@
-const CACHE = 'sp-shell-v3'
+const CACHE = 'sp-shell-v4'
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['/offline.html', '/icon-192.png', '/icon-512.png'])))
   self.skipWaiting()
@@ -31,13 +31,18 @@ self.addEventListener('fetch', event => {
   }
 })
 self.addEventListener('push', event => {
-  event.waitUntil(self.registration.showNotification('СП Организатор', { body: 'Есть новые события в работе команды', icon: '/icon-192.png', tag: 'sp-work', data: '/work' }))
+  const payload = event.data ? event.data.json() : {}
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(payload.title || 'СП Организатор', { body: payload.body || 'Откройте приложение, чтобы посмотреть изменения', icon: '/icon-192.png', tag: payload.tag || 'sp-work', data: { url: payload.url || '/work?tab=notifications' } }),
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => clients.forEach(client => client.postMessage({ type: 'work-refresh' })))
+  ]))
 })
 self.addEventListener('notificationclick', event => {
   event.notification.close()
+  const url = event.notification.data?.url || '/work?tab=notifications'
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clients => {
     const client = clients.find(client => new URL(client.url).origin === self.location.origin)
-    if (client) { await client.navigate('/work'); return client.focus() }
-    return self.clients.openWindow('/work')
+    if (client) { await client.navigate(url); client.postMessage({ type: 'work-refresh' }); return client.focus() }
+    return self.clients.openWindow(url)
   }))
 })
