@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   experimental: {
     agentFeedback: true,
+    agentUpgrade: 'security',
   },
   outputFileTracingExcludes: {
     '/*': ['./data/**/*'],
