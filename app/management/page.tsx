@@ -10,7 +10,7 @@ import users from '@ikions/icons/nodes/users'
 import check from '@ikions/icons/nodes/check'
 import clock from '@ikions/icons/nodes/clock'
 import warning from '@ikions/icons/nodes/warning'
-import plus from '@ikions/icons/nodes/plus'
+import { Plus } from 'lucide-react'
 
 type Employee = {
   id: number
@@ -35,9 +35,12 @@ export default async function ManagementPage() {
     <div className='section-page'>
       <div className='flex items-center justify-between'>
         <h1 className='text-3xl font-extrabold tracking-tight'>Команда</h1>
-        <div className='flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground'>
-          <IkonsIcon data={users} variant='outline' size={16} />
-          <span>{employees.length} сотрудников</span>
+        <div className='flex items-center gap-2'>
+          <div className='team-count flex items-center gap-1 text-muted-foreground'>
+            <IkonsIcon data={users} variant='outline' size={16} />
+            <span>{employees.length} сотрудников</span>
+          </div>
+          <Link href='/management/new' className='primary-action team-add'><Plus size={17} />Назначить задачу</Link>
         </div>
       </div>
 
@@ -51,7 +54,7 @@ export default async function ManagementPage() {
             <div className='employee-heading'>
               <span className='employee-avatar' aria-hidden='true'>{emp.name.split(' ').map(part => part.charAt(0)).slice(0, 2).join('')}</span>
               <div>
-                <h2 className='text-base font-semibold tracking-tight transition-colors group-hover:text-accent'>
+                <h2 className='text-base font-semibold tracking-tight transition-colors'>
                   {emp.name}
                 </h2>
                 <p className='text-xs text-muted-foreground mt-0.5'>{emp.department || 'Отдел не назначен'}</p>
@@ -62,17 +65,17 @@ export default async function ManagementPage() {
               <div className='flex flex-col items-center gap-1 rounded-lg border border-border/50 bg-background p-3'>
                 <IkonsIcon data={clock} variant='outline' size={16} />
                 <span className='text-lg font-bold'>{emp.total}</span>
-                <span className='text-[10px] uppercase tracking-wider text-muted-foreground'>Всего</span>
+                <span className='text-[10px] text-muted-foreground'>Всего</span>
               </div>
               <div className='flex flex-col items-center gap-1 rounded-lg border border-border/50 bg-background p-3'>
                 <IkonsIcon data={check} variant='filled' size={16} />
                 <span className='text-lg font-bold'>{emp.done}</span>
-                <span className='text-[10px] uppercase tracking-wider text-muted-foreground'>Готово</span>
+                <span className='text-[10px] text-muted-foreground'>Готово</span>
               </div>
               <div className='flex flex-col items-center gap-1 rounded-lg border border-border/50 bg-background p-3'>
                 <IkonsIcon data={warning} variant='filled' size={16} />
                 <span className='text-lg font-bold'>{emp.overdue}</span>
-                <span className='text-[10px] uppercase tracking-wider text-muted-foreground'>Просрочено</span>
+                <span className='text-[10px] text-muted-foreground'>Просрочено</span>
               </div>
             </div>
 
@@ -84,13 +87,6 @@ export default async function ManagementPage() {
             </div>
           </Link>
         ))}
-        <Link
-          href='/management/new'
-          className='employee-card employee-card-add'
-        >
-          <IkonsIcon data={plus} variant='outline' size={24} />
-          <span className='text-sm font-medium'>Назначить задачу</span>
-        </Link>
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ export default function TaskCalendar({ tasks, today, onSelect }: { tasks: Task[]
   const first = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + offset, 1))
   const start = first.getTime() - ((first.getUTCDay() + 6) % 7) * 86400000
   return <section className='task-calendar' aria-label='Календарь задач'>
-    <header><div><p>СРОКИ ЗАДАЧ</p><h2>{first.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</h2></div><div className='work-actions'><button className='secondary icon-button' onClick={() => setOffset(offset - 1)} aria-label='Предыдущий месяц'><ChevronLeft size={18} /></button><button className='secondary' onClick={() => setOffset(0)}>Сегодня</button><button className='secondary icon-button' onClick={() => setOffset(offset + 1)} aria-label='Следующий месяц'><ChevronRight size={18} /></button></div></header>
+    <header><div><p>Сроки задач</p><h2>{first.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</h2></div><div className='work-actions'><button className='secondary icon-button' onClick={() => setOffset(offset - 1)} aria-label='Предыдущий месяц'><ChevronLeft size={18} /></button><button className='secondary' onClick={() => setOffset(0)}>Сегодня</button><button className='secondary icon-button' onClick={() => setOffset(offset + 1)} aria-label='Следующий месяц'><ChevronRight size={18} /></button></div></header>
     <div className='calendar-grid'>
       {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(day => <div className='calendar-weekday' key={day}>{day}</div>)}
       {Array.from({ length: 42 }, (_, index) => {

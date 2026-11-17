@@ -23,11 +23,11 @@ export default async function ProfilePage() {
             <div className='text-sm text-muted-foreground'>{user.email}</div>
           </div>
         </div>
-        <div className='flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 text-sm'>
+        <div className='profile-row flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 text-sm'>
           <span className='text-muted-foreground'>Права доступа:</span>
           <span className='font-medium capitalize'>{user.is_superadmin ? 'Главный администратор' : user.is_admin ? 'Администратор' : 'Пользователь'}</span>
         </div>
-        <div className='flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 text-sm'><span className='text-muted-foreground'>Отдел:</span><span>{getDepartment(user)?.name || 'Не назначен'}</span></div>
+        <div className='profile-row flex items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 text-sm'><span className='text-muted-foreground'>Отдел:</span><span>{getDepartment(user)?.name || 'Не назначен'}</span></div>
       </div>
     </div>
   )

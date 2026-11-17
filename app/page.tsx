@@ -25,27 +25,26 @@ export default async function HomePage() {
 
   return (
     <div className='dashboard'>
-      <div className='page-eyebrow'><span><i /> СП ОРГАНИЗАТОР</span><span>{date}</span></div>
+      <div className='page-eyebrow'><span>{date}</span></div>
       <section className='overview-heading'>
         <div><p className='greeting'>{user ? `Здравствуйте, ${user.name.split(' ')[0]}` : 'Добро пожаловать'}</p><h1>Обзор <span>задач</span></h1></div>
         <Link href={user ? manager ? '/management/new' : '/calendar' : '/login'} className='primary-action'>{manager ? <Plus size={18} /> : <ArrowRight size={18} />}{user ? manager ? 'Назначить задачу' : 'К моим задачам' : 'Войти в команду'}</Link>
       </section>
       <section className='overview-grid' aria-label='Сводка задач'>
-        <Link href={destination} className='metric-card'><div className='card-kicker'>В РАБОТЕ<ClipboardList size={18} /></div><strong>{String(active.length).padStart(2, '0')}<span>задач</span></strong><p>Открыть список задач <ArrowUpRight size={17} /></p></Link>
-        <Link href={destination} className='metric-card attention'><div className='card-kicker'>ТРЕБУЮТ ВНИМАНИЯ<Radio size={18} /></div><strong>{String(overdue).padStart(2, '0')}<span>просрочено</span></strong><p>{overdue ? 'Проверьте сроки выполнения' : 'Просроченных задач нет'}<ArrowUpRight size={17} /></p></Link>
+        <Link href={destination} className='metric-card'><div className='card-kicker'>В работе<ClipboardList size={18} /></div><strong>{active.length}<span>задач</span></strong><p>Открыть список задач <ArrowUpRight size={17} /></p></Link>
+        <Link href={destination} className='metric-card attention'><div className='card-kicker'>Требуют внимания<Radio size={18} /></div><strong>{overdue}<span>просрочено</span></strong><p>{overdue ? 'Проверьте сроки выполнения' : 'Просроченных задач нет'}<ArrowUpRight size={17} /></p></Link>
       </section>
       <div className='work-grid'>
         <section className='task-panel'>
-          <div className='section-heading'><h2>Текущие задачи <span>{active.length}</span></h2><Link href={destination}>Все задачи <ArrowRight size={16} /></Link></div>
+          <div className='section-heading'><h2>Текущие задачи</h2><Link href={destination}>Все задачи <ArrowRight size={16} /></Link></div>
           <div className='task-list'>
-            {active.slice(0, 4).map((task, index) => <Link className='focus-task' key={task.id} href={`/work?task=${task.id}`}><span className='task-index'>{String(index + 1).padStart(2, '0')}</span><div className='task-content'><div className='task-meta'><span className={task.status === 'просрочена' ? 'status-dot urgent' : 'status-dot'}>{task.status}</span><span>{formatDeadline(task.deadline)}</span></div><h3>{task.title}</h3><p><span className='mini-avatar'>{task.name.charAt(0)}</span>{task.name}{task.priority === 'высокий' && <span className='priority-label'>Высокий приоритет</span>}</p></div><ArrowUpRight className='task-arrow' size={20} /></Link>)}
-            {active.length === 0 && <div className='empty-focus'><Check size={32} /><h3>{user ? 'Открытых задач нет' : 'Добро пожаловать в организатор'}</h3><p>{user ? 'Все назначенные задачи выполнены.' : 'Войдите, чтобы увидеть задачи, сроки и важные сообщения команды.'}</p><Link href={user ? destination : '/login'}>{user ? 'Открыть задачи' : 'Войти в организатор'} <ArrowRight size={16} /></Link></div>}
+            {active.slice(0, 4).map(task => <Link className='focus-task' key={task.id} href={`/work?task=${task.id}`}><span className='task-check' aria-hidden='true' /><div className='task-content'><h3>{task.title}</h3><div className='task-meta'><span className={task.status === 'просрочена' ? 'status-dot urgent' : 'status-dot'}>{task.status}</span><span>{formatDeadline(task.deadline)}</span>{task.priority === 'высокий' && <span className='priority-label'>Высокий приоритет</span>}</div></div><span className='mini-avatar' title={task.name}>{task.name.charAt(0)}</span></Link>)}
+            {active.length === 0 && <div className='empty-focus'><Check size={32} /><h3>{user ? 'Здесь пока спокойно' : 'Добро пожаловать в организатор'}</h3><p>{user ? 'Все назначенные задачи выполнены.' : 'Войдите, чтобы увидеть задачи, сроки и важные сообщения команды.'}</p><Link href={user ? destination : '/login'}>{user ? 'Открыть задачи' : 'Войти в организатор'} <ArrowRight size={16} /></Link></div>}
           </div>
           <div className='completion'><span><Check size={16} /> Выполнено {done} из {tasks.length}</span><div role='progressbar' aria-label='Выполненные задачи' aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progress}%` }} /></div><b>{progress}%</b></div>
         </section>
         <aside className='notice-panel'><div className='section-heading'><h2>Объявления</h2><Radio size={19} /></div><p className='panel-description'>Важное для всей команды</p>{notices.map(notice => <Link className='notice-item' key={notice.id} href='/important'><span className={notice.category === 'срочное' ? 'notice-category urgent' : 'notice-category'}>{notice.category}</span><h3>{notice.title}</h3><ArrowUpRight size={17} /></Link>)}{notices.length === 0 && <p className='notice-empty'>{user ? 'Новых сообщений пока нет.' : 'Объявления и инструкции будут здесь после входа.'}</p>}<Link className='notice-link' href='/important'>Все объявления <ArrowRight size={17} /></Link></aside>
       </div>
-      <footer className='dashboard-footer'><span>СП / ОРГАНИЗАТОР</span><span>Планирование работы ресторана</span></footer>
     </div>
   )
 }

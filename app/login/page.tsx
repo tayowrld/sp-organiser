@@ -64,7 +64,7 @@ export default function LoginPage() {
               placeholder='••••••••'
             />
           </div>
-          {error && <div className='rounded-lg bg-muted px-3 py-2 text-sm text-accent'>{error}</div>}
+          {error && <div className='rounded-lg bg-muted px-3 py-2 text-sm text-[#f19a91]'>{error}</div>}
           <button
             type='submit'
             disabled={pending}

@@ -44,10 +44,10 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
 
   function StatusBadge({ status }: { status: Task['status'] }) {
     const classes: Record<Task['status'], string> = {
-      'новая': 'border border-border text-muted-foreground',
-      'в работе': 'border border-accent/30 text-accent',
-      'выполнена': 'bg-[#e9dcd6] text-[#5b4032]',
-      'просрочена': 'bg-muted text-accent border border-accent/20',
+      'новая': 'bg-muted text-muted-foreground',
+      'в работе': 'bg-muted text-foreground',
+      'выполнена': 'bg-muted text-[#9bc8aa]',
+      'просрочена': 'bg-muted text-[#f19a91]',
     }
     return (
       <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${classes[status]}`}>
@@ -86,7 +86,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
             data-state={task.status}
             >
               <div className='flex items-start justify-between gap-4'>
-                <h3 className='text-base font-semibold tracking-tight transition-colors group-hover:text-accent'>
+                <h3 className='text-base font-semibold tracking-tight transition-colors'>
                   <Link href={`/work?task=${task.id}`}>{task.title}</Link>
                 </h3>
                 <StatusBadge status={task.status} />
@@ -95,7 +95,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
               <div className='flex items-center gap-4 text-xs text-muted-foreground'>
                 <span>{formatDeadline(task.deadline)}</span>
                 <span className='text-border'>|</span>
-                <span className={task.priority === 'высокий' ? 'text-accent font-medium' : task.priority === 'средний' ? 'text-muted-foreground' : 'text-muted-foreground/60'}>
+                <span className={task.priority === 'высокий' ? 'text-[#f19a91] font-medium' : task.priority === 'средний' ? 'text-muted-foreground' : 'text-muted-foreground/60'}>
                   {task.priority}
                 </span>
               </div>
