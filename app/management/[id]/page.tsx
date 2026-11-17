@@ -87,7 +87,7 @@ export default async function EmployeePage({ params }: { params: Promise<{ id: s
             >
               <div className='flex items-start justify-between gap-4'>
                 <h3 className='text-base font-semibold tracking-tight transition-colors group-hover:text-accent'>
-                  <Link href='/work'>{task.title}</Link>
+                  <Link href={`/work?task=${task.id}`}>{task.title}</Link>
                 </h3>
                 <StatusBadge status={task.status} />
               </div>
