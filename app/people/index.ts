@@ -16,7 +16,9 @@ export function getPerson(id: number) {
 }
 
 export function canManagePerson(actor: Person, target: Person) {
-  return Boolean(actor.is_active && target.id !== actor.id && !target.is_superadmin && (actor.is_superadmin || actor.is_admin && target.manager_id === actor.id && !target.is_admin))
+  if (!actor.is_active) return false
+  if (actor.is_superadmin) return true
+  return Boolean(target.id !== actor.id && !target.is_superadmin && actor.is_admin && target.manager_id === actor.id && !target.is_admin)
 }
 
 export function canAssignTask(actor: Person, targetId: number) {

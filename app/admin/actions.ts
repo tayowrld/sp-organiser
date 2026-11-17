@@ -22,10 +22,12 @@ export async function savePerson(_state: { error: string; success: string }, dat
   const managerValue = String(data.get('manager_id') || '')
   const managerId = actor.is_superadmin ? managerValue ? Number(managerValue) : null : actor.id
   const isAdmin = actor.is_superadmin ? Number(data.get('is_admin') === 'on') : 0
+  const isActive = Number(data.get('is_active') === 'on')
+  const isSuperadmin = actor.is_superadmin ? Number(data.get('is_superadmin') === 'on') : Number(target?.is_superadmin || 0)
+  if (target?.is_superadmin && (!isSuperadmin || !isActive) && (db.prepare('SELECT COUNT(*) AS n FROM users WHERE is_superadmin = 1 AND is_active = 1').get() as { n: number }).n <= 1) return fail('Нельзя снять права или отключить последнего главного администратора.')
   const departmentValue = String(data.get('department_id') || '')
   const departmentId = actor.is_superadmin && isAdmin && departmentValue ? Number(departmentValue) : null
   if (departmentId !== null && (!Number.isInteger(departmentId) || !db.prepare('SELECT id FROM departments WHERE id = ?').get(departmentId))) return fail('Выберите существующий отдел.')
-  const isActive = Number(data.get('is_active') === 'on')
   if (!validManager(id || -1, managerId)) return fail('Выберите действующего руководителя. Подчинение по кругу недопустимо.')
   if (!isActive && id && db.prepare('SELECT id FROM users WHERE manager_id = ? AND is_active = 1 LIMIT 1').get(id)) return fail('Сначала переназначьте действующих сотрудников этого пользователя.')
   const duplicate = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(email, id)
@@ -37,10 +39,11 @@ export async function savePerson(_state: { error: string; success: string }, dat
       const currentTarget = id ? getPerson(id) : undefined
       if (!currentActor?.is_active || currentActor.is_admin !== actor.is_admin || currentActor.is_superadmin !== actor.is_superadmin) throw new Error('Доступ изменён')
       if (id && (!currentTarget || !canManagePerson(currentActor, currentTarget))) throw new Error('Доступ изменён')
+      if (currentTarget?.is_superadmin && (!isSuperadmin || !isActive) && (db.prepare('SELECT COUNT(*) AS n FROM users WHERE is_superadmin = 1 AND is_active = 1').get() as { n: number }).n <= 1) throw new Error('Последний главный администратор')
       if (!validManager(id || -1, managerId)) throw new Error('Руководитель изменён')
       let savedId = id
       if (id) {
-        db.prepare('UPDATE users SET name = ?, email = ?, manager_id = ?, is_admin = ?, is_active = ?, department_id = ?, password_hash = COALESCE(?, password_hash) WHERE id = ?').run(name, email, managerId, isAdmin, isActive, departmentId, hash, id)
+        db.prepare('UPDATE users SET name = ?, email = ?, manager_id = ?, is_admin = ?, is_superadmin = ?, is_active = ?, department_id = ?, password_hash = COALESCE(?, password_hash) WHERE id = ?').run(name, email, managerId, isAdmin, isSuperadmin, isActive, departmentId, hash, id)
       } else {
         savedId = Number(db.prepare("INSERT INTO users (name, email, password_hash, role, manager_id, is_admin, is_active, department_id) VALUES (?, ?, ?, 'employee', ?, ?, ?, ?)").run(name, email, hash, managerId, isAdmin, isActive, departmentId).lastInsertRowid)
       }
