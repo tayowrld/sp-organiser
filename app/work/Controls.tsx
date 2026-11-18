@@ -16,7 +16,7 @@ export function PhotoField({ required = false }: { required?: boolean }) {
   return <div className='photo-field'>
     <label htmlFor={id}>Фотография {required && <span>· обязательна</span>}</label>
     {preview ? <div className='photo-preview'><img src={preview} alt='Выбранная фотография' /><button type='button' className='icon-button' aria-label='Убрать фотографию' onClick={() => { setFile(null); const input = document.getElementById(id) as HTMLInputElement | null; if (input) input.value = '' }}><X size={17} /></button></div> : <span className='photo-placeholder'><ImagePlus size={22} /></span>}
-    <input id={id} type='file' name='photo' accept='image/*,.heic,.heif' aria-required={required} aria-describedby={`${id}-hint`} aria-invalid={Boolean(error)} onChange={event => {
+    <input id={id} type='file' name='photo' accept='image/*,.heic,.heif' capture='environment' aria-required={required} aria-describedby={`${id}-hint`} aria-invalid={Boolean(error)} onChange={event => {
       const input = event.currentTarget
       const selected = input.files?.[0] || null
       const problem = selected && !selected.type.startsWith('image/') && !/\.(heic|heif)$/i.test(selected.name) ? 'Выберите файл фотографии' : selected && selected.size > 20 * 1024 * 1024 ? 'Исходная фотография должна быть меньше 20 МБ' : ''
@@ -25,7 +25,7 @@ export function PhotoField({ required = false }: { required?: boolean }) {
       if (problem) input.reportValidity()
       setFile(problem ? null : selected)
     }} />
-    <small id={`${id}-hint`}>Фото с камеры или из галереи, до 20 МБ. Перед отправкой изображение уменьшается.</small>
+    <small id={`${id}-hint`}>Сделайте фото с камеры, до 20 МБ. Перед отправкой изображение уменьшается.</small>
     {error && <p className='form-error' role='alert'>{error}</p>}
   </div>
 }
